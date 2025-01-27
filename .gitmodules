@@ -1,0 +1,3 @@
+[submodule "detector-wrapper"]
+	path = detector-wrapper
+	url = git@github.com:DCGM/detector-wrapper.git
