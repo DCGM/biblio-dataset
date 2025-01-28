@@ -3,8 +3,10 @@ import json
 import logging
 import os
 
+from biblio_dataset.biblio_evaluators import CERBiblioEvaluator, BaseBiblioEvaluator
 from biblio_dataset.create_biblio_dataset import BiblioRecord
 from biblio_dataset.create_biblio_dataset import normalize_biblio_record
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,8 @@ def parse_arguments():
     parser.add_argument('--result-dir', type=str, required=True)
 
     parser.add_argument('--normalize-result', action='store_true')
+
+    parser.add_argument('--evaluator', type=str, default='basic_cer', choices=['cer'])
 
     parser.add_argument("--logging-level", default="INFO", choices=["ERROR", "WARNING", "INFO", "DEBUG"])
 
@@ -33,21 +37,27 @@ def main():
     if args.normalize_result:
         result_biblio_records = [normalize_biblio_record(record) for record in result_biblio_records]
 
+    evaluator = eval_biblio_records(gt_biblio_records, result_biblio_records, args.evaluator)
 
-def eval_biblio_records(gt_biblio_records, result_biblio_records):
+
+def eval_biblio_records(gt_biblio_records, result_biblio_records, evaluator_name) -> BaseBiblioEvaluator:
     result_biblio_records = sorted(result_biblio_records, key=lambda x: x.task_id)
     task_id_to_gt_biblio_record = {record.task_id: record for record in gt_biblio_records}
+
+    if evaluator_name == 'cer':
+        evaluator = CERBiblioEvaluator()
+    else:
+        raise NotImplementedError(f"Evaluator {evaluator_name} is not implemented")
 
     for result_record in result_biblio_records:
         gt_record = task_id_to_gt_biblio_record.get(result_record.task_id)
         if gt_record is None:
             logger.warning(f"Record with task_id={result_record.task_id} not found in ground truth, skipping")
             continue
-        compare_biblio_records(gt_record, result_record)
+        evaluator.compare_biblio_records(gt_record, result_record)
 
+    return evaluator
 
-def compare_biblio_records(gt_record, result_record):
-    pass
 
 
 def load_biblio_records(input_dir: str):
