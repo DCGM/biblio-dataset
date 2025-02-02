@@ -3,23 +3,23 @@ import json
 import logging
 import os
 
-from biblio_dataset.biblio_evaluators import CERBiblioEvaluator, BaseBiblioEvaluator
-from biblio_dataset.create_biblio_dataset import BiblioRecord
-from biblio_dataset.create_biblio_dataset import normalize_biblio_record
-
+from biblio_dataset.biblio_evaluators import CERBiblioEvaluator, BaseBiblioEvaluator, BiblioResult, \
+    normalize_biblio_result
+from biblio_dataset.create_biblio_dataset import BiblioRecord, normalize_biblio_record
 
 logger = logging.getLogger(__name__)
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Crete biblio dataset")
+    parser = argparse.ArgumentParser(description="Evaluate biblio dataset")
 
-    parser.add_argument('--gt-dir', type=str, required=True)
-    parser.add_argument('--result-dir', type=str, required=True)
+    parser.add_argument('--record-dir', type=str, required=True, help="Ground truth directory with biblio records")
+    parser.add_argument('--result-dir', type=str, required=True, help="Engine directory with biblio results")
 
+    parser.add_argument('--normalize-record', action='store_true')
     parser.add_argument('--normalize-result', action='store_true')
 
-    parser.add_argument('--evaluator', type=str, default='basic_cer', choices=['cer'])
+    parser.add_argument('--evaluator', type=str, default='CER-01', choices=['CER-01'])
 
     parser.add_argument("--logging-level", default="INFO", choices=["ERROR", "WARNING", "INFO", "DEBUG"])
 
@@ -31,33 +31,31 @@ def main():
     logging.basicConfig(level=args.logging_level)
 
 
-    gt_biblio_records = load_biblio_records(args.gt_dir)
-    result_biblio_records = load_biblio_records(args.result_dir)
+    biblio_records = load_biblio_records(args.record_dir)
+    logger.info(f'{len(biblio_records)} biblio records loaded from {args.record_dir}')
+    biblio_results = load_biblio_results(args.result_dir)
+    logger.info(f'{len(biblio_results)} biblio results loaded from {args.result_dir}')
+
+    if len(biblio_records) != len(biblio_results):
+        logger.warning(f"Number of records and results is different: {len(biblio_records)} vs {len(biblio_results)}")
+
+    if args.normalize_record:
+        logger.info("")
+        logger.info("Normalizing record records...")
+        biblio_records = [BiblioRecord.model_validate(normalize_biblio_record(biblio_record)) for biblio_record in biblio_records]
+        logger.info("Normalization done")
 
     if args.normalize_result:
-        result_biblio_records = [normalize_biblio_record(record) for record in result_biblio_records]
+        logger.info("")
+        logger.info("Normalizing result records...")
+        biblio_results = [normalize_biblio_result(biblio_result) for biblio_result in biblio_results]
+        logger.info("Normalization done")
 
-    evaluator = eval_biblio_records(gt_biblio_records, result_biblio_records, args.evaluator)
+    evaluator = eval_biblio_records(biblio_records, biblio_results, args.evaluator)
+    stats = evaluator.get_stats()
 
-
-def eval_biblio_records(gt_biblio_records, result_biblio_records, evaluator_name) -> BaseBiblioEvaluator:
-    result_biblio_records = sorted(result_biblio_records, key=lambda x: x.task_id)
-    task_id_to_gt_biblio_record = {record.task_id: record for record in gt_biblio_records}
-
-    if evaluator_name == 'cer':
-        evaluator = CERBiblioEvaluator()
-    else:
-        raise NotImplementedError(f"Evaluator {evaluator_name} is not implemented")
-
-    for result_record in result_biblio_records:
-        gt_record = task_id_to_gt_biblio_record.get(result_record.task_id)
-        if gt_record is None:
-            logger.warning(f"Record with task_id={result_record.task_id} not found in ground truth, skipping")
-            continue
-        evaluator.compare_biblio_records(gt_record, result_record)
-
-    return evaluator
-
+    logger.info("")
+    log_stats(stats)
 
 
 def load_biblio_records(input_dir: str):
@@ -68,3 +66,56 @@ def load_biblio_records(input_dir: str):
         with open(os.path.join(input_dir, file), 'r') as f:
             biblio_records.append(BiblioRecord.model_validate(json.load(f)))
     return biblio_records
+
+def load_biblio_results(input_dir: str):
+    biblio_results = []
+    for file in os.listdir(input_dir):
+        if not file.endswith('.json'):
+            continue
+        with open(os.path.join(input_dir, file), 'r') as f:
+            biblio_results.append(BiblioResult.model_validate(json.load(f)))
+    return biblio_results
+
+
+def eval_biblio_records(biblio_records, biblio_results, evaluator_name) -> BaseBiblioEvaluator:
+    biblio_results = sorted(biblio_results, key=lambda x: x.library_id)
+    library_id_to_biblio_record = {record.library_id: record for record in biblio_records}
+
+    logger.info(f"Evaluator: {evaluator_name}")
+    if evaluator_name == 'CER-01':
+        evaluator = CERBiblioEvaluator(max_cer=0.1)
+    else:
+        raise NotImplementedError(f"Evaluator {evaluator_name} is not implemented")
+
+    for biblio_result in biblio_results:
+        biblio_record = library_id_to_biblio_record.get(biblio_result.library_id)
+        if biblio_record is None:
+            logger.warning(f"Record with library_id={biblio_result.library_id} not found in ground truth, skipping -> the final results will be incorrect!")
+            continue
+        evaluator.compare_biblio_record_to_result(biblio_record, biblio_result)
+
+    return evaluator
+
+
+def log_stats(stats):
+    header = f"{'Key':>25}  {'Result':<10}{'Record':<10}{'Accuracy':<10}"
+    separator = "-" * len(header)
+
+    logger.info(header)
+    logger.info(separator)
+
+    for key, val in stats.items():
+        result = val['result']
+        record = val['record']
+        acc = result / record if record != 0 else 0
+        logger.info(f"{key:>25}  {result:<10}{record:<10}{acc:<10.2f}")
+
+    total_result = sum([val['result'] for val in stats.values()])
+    total_record = sum([val['record'] for val in stats.values()])
+    overall_acc = total_result / total_record if total_record != 0 else 0
+
+    logger.info(separator)
+    logger.info(f"{'All':>25}  {total_result:<10}{total_record:<10}{overall_acc:<10.2f}")
+
+if __name__ == "__main__":
+    main()

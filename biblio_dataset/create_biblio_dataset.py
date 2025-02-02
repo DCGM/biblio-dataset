@@ -4,13 +4,14 @@ import logging
 import os
 import re
 
+from detector_wrapper.parsers.detector_parser import DetectorParser
 from detector_wrapper.parsers.pero_ocr import ALTOMatch
 
 from typing import List, Optional
 from pydantic import BaseModel
 
 class BiblioRecord(BaseModel):
-    task_id: int
+    task_id: str
     library_id: str
 
     title: Optional[str] = None
@@ -82,7 +83,12 @@ def main():
     args = parse_arguments()
     logging.basicConfig(level=args.logging_level)
 
-    alto_match = ALTOMatch(args.label_studio_export_json,
+    detector_parser = DetectorParser()
+    detector_parser.parse_label_studio(label_studio_export=args.label_studio_export_json,
+                                       class_remapping={'vydavatel': 'nakladatel'},
+                                       run_checks=True)
+
+    alto_match = ALTOMatch(detector_parser,
                            args.alto_export_dir,
                            min_alto_word_area_in_detection_to_match=args.min_alto_word_area_in_detection_to_match)
     alto_match.match()
@@ -97,7 +103,7 @@ def main():
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
         for biblio_record in biblio_records:
-            with open(os.path.join(args.output_dir, f'{biblio_record.task_id}.json'), 'w') as f:
+            with open(os.path.join(args.output_dir, f'{biblio_record.library_id}.json'), 'w') as f:
                 json.dump(biblio_record.model_dump(exclude_none=True), f, indent=4, default=str)
 
 
@@ -283,16 +289,15 @@ def remove_multiple_whitespaces(text: str):
     return re.sub(r"\s+", " ", text)
 
 
-
 def convert_alto_match_to_biblio_records(alto_match: ALTOMatch):
     biblio_records = []
     for matched_page in alto_match.matched_pages:
-        biblio_record = {'task_id': matched_page.label_studio_page.id,
-                         'library_id': os.path.splitext(matched_page.label_studio_page.image_filename)[0]}
+        biblio_record = {'task_id': str(matched_page.detector_parser_page.id),
+                         'library_id': os.path.splitext(matched_page.detector_parser_page.image_filename)[0]}
         for matched_detection in matched_page.matched_detections:
             detection_class = matched_detection.get_class()
             if detection_class not in label_studio_classes_to_biblio_record_classes:
-                logger.warning(f"Skipping detection with class {detection_class}, label studio task id {matched_page.label_studio_page.id}")
+                logger.warning(f"Skipping detection with class {detection_class}, label studio task id {matched_page.detector_parser_page.id}")
                 continue
             biblio_record_class = label_studio_classes_to_biblio_record_classes[detection_class]
             if biblio_record_class in ['publisher', 'author', 'illustrator', 'translator', 'editor']:
@@ -303,7 +308,7 @@ def convert_alto_match_to_biblio_records(alto_match: ALTOMatch):
                 if biblio_record_class not in biblio_record:
                     biblio_record[biblio_record_class] = matched_detection.get_text()
                 else:
-                    logger.warning(f"Multiple values for {biblio_record_class} in label studio task id {matched_page.label_studio_page.id}")
+                    logger.warning(f"Multiple values for {biblio_record_class} in label studio task id {matched_page.detector_parser_page.id}")
         biblio_record = BiblioRecord.model_validate(biblio_record)
         biblio_records.append(biblio_record)
     return biblio_records
