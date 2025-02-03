@@ -50,6 +50,7 @@ def main():
     [check_biblio_record(biblio_record) for biblio_record in biblio_results]
 
     if args.output_dir is not None:
+        logger.info(f"Saving {len(biblio_results)} biblio records to {args.output_dir}")
         os.makedirs(args.output_dir, exist_ok=True)
         for biblio_record in biblio_results:
             with open(os.path.join(args.output_dir, f'{biblio_record.library_id}.json'), 'w') as f:

@@ -98,24 +98,34 @@ def eval_biblio_records(biblio_records, biblio_results, evaluator_name) -> BaseB
 
 
 def log_stats(stats):
-    header = f"{'Key':>25}  {'Result':<10}{'Record':<10}{'Accuracy':<10}"
+    header = f"{'Key':>25}  {'GT':<10}{'TP':<10}{'FP':<10}{'Recall':<10}{'Precision':<10}{'F1':<10}"
     separator = "-" * len(header)
 
     logger.info(header)
     logger.info(separator)
 
     for key, val in stats.items():
-        result = val['result']
         record = val['record']
-        acc = result / record if record != 0 else 0
-        logger.info(f"{key:>25}  {result:<10}{record:<10}{acc:<10.2f}")
+        result_true_positive = val['result_true_positive']
+        result_false_positive = val['result_false_positive']
+        recall = result_true_positive / record if record != 0 else 0
+        result = result_true_positive + result_false_positive
+        precision = result_true_positive / result if result != 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
+        logger.info(f"{key:>25}  {record:<10}{result_true_positive:<10}{result_false_positive:<10}{recall:<10.2f}{precision:<10.2f}{f1:<10.2f}")
 
-    total_result = sum([val['result'] for val in stats.values()])
     total_record = sum([val['record'] for val in stats.values()])
-    overall_acc = total_result / total_record if total_record != 0 else 0
+    total_result_true_positive = sum([val['result_true_positive'] for val in stats.values()])
+    total_result_false_positive = sum([val['result_false_positive'] for val in stats.values()])
+    total_result = total_result_true_positive + total_result_false_positive
+    total_recall = total_result_true_positive / total_record if total_record != 0 else 0
+    total_precision = total_result_true_positive / total_result if total_result != 0 else 0
+    total_f1 = 2 * (total_precision * total_recall) / (total_precision + total_recall) if total_precision + total_recall != 0 else 0
+    acc = total_result_true_positive / total_record if total_record != 0 else 0
 
     logger.info(separator)
-    logger.info(f"{'All':>25}  {total_result:<10}{total_record:<10}{overall_acc:<10.2f}")
+    logger.info(f"{'All':>25}  {total_record:<10}{total_result_true_positive:<10}{total_result_false_positive:<10}{total_recall:<10.2f}{total_precision:<10.2f}{total_f1:<10.2f}")
+    logger.info(f"{'Accuracy':>25}  {acc:<10.2f}")
 
 if __name__ == "__main__":
     main()

@@ -76,38 +76,43 @@ class BaseBiblioEvaluator(ABC):
     """
     def __init__(self):
         self.biblio_record_stats: List[BiblioStat] = []
-        self.biblio_result_stats: List[BiblioStat] = []
+        self.biblio_result_true_positive_stats: List[BiblioStat] = []
+        self.biblio_result_false_positive_stats: List[BiblioStat] = []
 
     def compare_biblio_record_to_result(self, biblio_record: BiblioRecord, biblio_result: BiblioResult):
         biblio_record_stat = {'task_id': biblio_record.task_id, 'library_id': biblio_record.library_id}
         biblio_record = biblio_record.model_dump(exclude_none=True)
-        biblio_result_stat = {'library_id': biblio_result.library_id}
+        biblio_result_true_positive_stat = {'library_id': biblio_result.library_id}
+        biblio_result_false_positive_stat = {'library_id': biblio_result.library_id}
         biblio_result = biblio_result.model_dump(exclude_none=True)
 
         for key, value in biblio_record.items():
             if key in ['task_id', 'library_id']:
                 continue
-            if isinstance(value, list):
-                biblio_record_stat[key] = len(value)
-                if key in biblio_result:
-                    biblio_result_stat[key] = self.compare_list(value, biblio_result[key], key)
-            elif value is not None:
-                biblio_record_stat[key] = 1
-                if key in biblio_result:
-                    biblio_result_stat[key] = self.compare_string(value, biblio_result[key], key)
+            if isinstance(value, str):
+                value = [value]
+            biblio_record_stat[key] = len(value)
+            if key in biblio_result:
+                biblio_result_true_positive_stat[key] = self.compare_list(value, biblio_result[key], key)
+                biblio_result_false_positive_stat[key] = min(len(biblio_result[key]), len(biblio_record[key])) - biblio_result_true_positive_stat[key]
+
+
+        for key, value in biblio_result.items():
+            if key in ['task_id', 'library_id']:
+                continue
+            if key not in biblio_record:
+                biblio_result_false_positive_stat[key] = 1
 
         biblio_record_stat = BiblioStat.model_validate(biblio_record_stat)
-        biblio_result_stat = BiblioStat.model_validate(biblio_result_stat)
+        biblio_result_true_positive_stat = BiblioStat.model_validate(biblio_result_true_positive_stat)
+        biblio_result_false_positive_stat = BiblioStat.model_validate(biblio_result_false_positive_stat)
 
         self.biblio_record_stats.append(biblio_record_stat)
-        self.biblio_result_stats.append(biblio_result_stat)
+        self.biblio_result_true_positive_stats.append(biblio_result_true_positive_stat)
+        self.biblio_result_false_positive_stats.append(biblio_result_false_positive_stat)
 
     @abstractmethod
     def compare_list(self, record_list: List[str], result_list: List[Tuple[str, float]], biblio_class: str) -> int:
-        pass
-
-    @abstractmethod
-    def compare_string(self, record_string: str, result_list: List[Tuple[str, float]], biblio_class: str) -> int:
         pass
 
     @staticmethod
@@ -121,7 +126,8 @@ class BaseBiblioEvaluator(ABC):
                 continue
             stats[key] = {
                 'record': sum([getattr(record, key) for record in self.biblio_record_stats]),
-                'result': sum([getattr(record, key) for record in self.biblio_result_stats])
+                'result_true_positive': sum([getattr(record, key) for record in self.biblio_result_true_positive_stats]),
+                'result_false_positive': sum([getattr(record, key) for record in self.biblio_result_false_positive_stats]),
             }
         return stats
 
@@ -150,15 +156,6 @@ class CERBiblioEvaluator(BaseBiblioEvaluator):
                     break
         return hits
 
-    def compare_string(self, record_string: str, result_list: List[Tuple[str, float]], biblio_class: str) -> int:
-        result_list = sorted(result_list, key=lambda x: x[1], reverse=True)
-        for k, (result_item, result_conf) in enumerate(result_list):
-            if k >= self.top_k:
-                break
-            cer = self.get_cer(record_string, result_item)
-            if cer <= self.max_cer:
-                return 1
-        return 0
 
 
 def normalize_biblio_result(biblio_result: BiblioResult):
@@ -266,6 +263,7 @@ def normalize_biblio_result(biblio_result: BiblioResult):
 
 def convert_alto_match_to_biblio_results(alto_match: ALTOMatch):
     biblio_results = []
+    logger.info(f"Converting {len(alto_match.matched_pages)} matched pages to BiblioResults")
     for matched_page in alto_match.matched_pages:
         biblio_result = {'task_id': matched_page.detector_parser_page.id,
                          'library_id': os.path.splitext(matched_page.detector_parser_page.image_filename)[0]}
@@ -293,4 +291,5 @@ def convert_alto_match_to_biblio_results(alto_match: ALTOMatch):
 
         biblio_result = BiblioResult.model_validate(biblio_result)
         biblio_results.append(biblio_result)
+    logger.info(f"Converted {len(biblio_results)} matched pages to BiblioResults")
     return biblio_results
