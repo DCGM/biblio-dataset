@@ -3,9 +3,8 @@ import json
 import logging
 import os
 
-from biblio_dataset.biblio_evaluators import convert_alto_match_to_biblio_results, normalize_biblio_result
-from biblio_dataset.create_biblio_dataset import convert_alto_match_to_biblio_records, normalize_biblio_record, \
-    check_biblio_record
+from biblio_dataset.biblio_evaluators import convert_alto_match_to_biblio_results
+from biblio_dataset.create_biblio_dataset import check_biblio_record
 from detector_wrapper.parsers.detector_parser import DetectorParser
 from detector_wrapper.parsers.pero_ocr import ALTOMatch
 
@@ -17,7 +16,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="YOLO + PERO-OCR engine")
 
     parser.add_argument('--yolo-export-dir', type=str, required=True)
-    parser.add_argument('--yolo-yaml', type=str, required=True)
+    parser.add_argument('--yolo-yaml', type=str)
     parser.add_argument('--alto-export-dir', type=str, required=True)
 
     parser.add_argument('--min-alto-word-area-in-detection-to-match', type=float, default=0.65)
@@ -44,8 +43,6 @@ def main():
 
     biblio_results = convert_alto_match_to_biblio_results(alto_match)
 
-    if args.normalize:
-        biblio_results = [normalize_biblio_result(biblio_result) for biblio_result in biblio_results]
 
     [check_biblio_record(biblio_record) for biblio_record in biblio_results]
 
@@ -54,9 +51,7 @@ def main():
         os.makedirs(args.output_dir, exist_ok=True)
         for biblio_record in biblio_results:
             with open(os.path.join(args.output_dir, f'{biblio_record.library_id}.json'), 'w') as f:
-                json.dump(biblio_record.model_dump(exclude_none=True), f, indent=4, default=str)
-
-
+                json.dump(biblio_record.model_dump(exclude_none=True), f, indent=4, default=str, ensure_ascii=False)
 
 
 

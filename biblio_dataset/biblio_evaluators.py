@@ -5,11 +5,7 @@ from typing import Optional, Tuple, List
 from pydantic import BaseModel
 from abc import ABC, abstractmethod
 
-from biblio_dataset.create_biblio_dataset import BiblioRecord, normalize_publisher, normalize_author, \
-    normalize_illustrator, normalize_translator, normalize_editor, normalize_title, normalize_sub_title, \
-    normalize_part_name, normalize_part_number, normalize_series_name, normalize_series_number, normalize_edition, \
-    normalize_place_term, normalize_date_issued, normalize_manufacture_place_term, normalize_manufacture_publisher, \
-    label_studio_classes_to_biblio_record_classes
+from biblio_dataset.create_biblio_dataset import BiblioRecord, label_studio_classes_to_biblio_record_classes
 from Levenshtein import distance
 
 from detector_wrapper.parsers.pero_ocr import ALTOMatch
@@ -65,6 +61,30 @@ class BiblioStat(BaseModel):
     translator: int = 0
     editor: int = 0
 
+class BiblioLabelConf(BaseModel):
+    task_id: Optional[str] = None
+    library_id: str
+
+    title: Tuple[List[int], List[float]] = ([], [])
+    subTitle: Tuple[List[int], List[float]] = ([], [])
+    partName: Tuple[List[int], List[float]] = ([], [])
+    partNumber: Tuple[List[int], List[float]] = ([], [])
+    seriesName: Tuple[List[int], List[float]] = ([], [])
+    seriesNumber: Tuple[List[int], List[float]] = ([], [])
+
+    edition: Tuple[List[int], List[float]] = ([], [])
+    placeTerm: Tuple[List[int], List[float]] = ([], [])
+    dateIssued: Tuple[List[int], List[float]] = ([], [])
+
+    publisher: Tuple[List[int], List[float]] = ([], [])
+    manufacturePublisher: Tuple[List[int], List[float]] = ([], [])
+    manufacturePlaceTerm: Tuple[List[int], List[float]] = ([], [])
+
+    author: Tuple[List[int], List[float]] = ([], [])
+    illustrator: Tuple[List[int], List[float]] = ([], [])
+    translator: Tuple[List[int], List[float]] = ([], [])
+    editor: Tuple[List[int], List[float]] = ([], [])
+
 
 class BaseBiblioEvaluator(ABC):
     """
@@ -78,41 +98,55 @@ class BaseBiblioEvaluator(ABC):
         self.biblio_record_stats: List[BiblioStat] = []
         self.biblio_result_true_positive_stats: List[BiblioStat] = []
         self.biblio_result_false_positive_stats: List[BiblioStat] = []
+        self.biblio_result_label_conf: List[BiblioLabelConf] = []
 
     def compare_biblio_record_to_result(self, biblio_record: BiblioRecord, biblio_result: BiblioResult):
         biblio_record_stat = {'task_id': biblio_record.task_id, 'library_id': biblio_record.library_id}
-        biblio_record = biblio_record.model_dump(exclude_none=True)
+        biblio_record = biblio_record.model_dump(exclude_none=False)
         biblio_result_true_positive_stat = {'library_id': biblio_result.library_id}
         biblio_result_false_positive_stat = {'library_id': biblio_result.library_id}
+        biblio_result_label_conf = {'library_id': biblio_result.library_id}
         biblio_result = biblio_result.model_dump(exclude_none=True)
 
         for key, value in biblio_record.items():
             if key in ['task_id', 'library_id']:
                 continue
+            if value is None and key in biblio_result and biblio_result[key] is not None:
+                biblio_result_false_positive_stat[key] = len(biblio_result[key])
+                labels = [0] * len(biblio_result[key])
+                conf = [conf for _, conf in biblio_result[key]]
+                biblio_result_label_conf[key] = (labels, conf)
+                continue
+            if value is None:
+                continue
             if isinstance(value, str):
                 value = [value]
             biblio_record_stat[key] = len(value)
             if key in biblio_result:
-                biblio_result_true_positive_stat[key] = self.compare_list(value, biblio_result[key], key)
-                biblio_result_false_positive_stat[key] = min(len(biblio_result[key]), len(biblio_record[key])) - biblio_result_true_positive_stat[key]
+                tp, labels, conf = self.compare_list(value, biblio_result[key], key)
+                biblio_result_true_positive_stat[key] = tp
+                biblio_result_false_positive_stat[key] = len(biblio_result[key]) - tp
+                if biblio_result_false_positive_stat[key] < 0:
+                    logger.warning(f"False positive count is negative, this should not happen, fix compare_list to return correct count")
+                biblio_result_label_conf[key] = (labels, conf)
+            else:
+                labels = [1] * len(value)
+                conf = [0.0] * len(value)
+                biblio_result_label_conf[key] = (labels, conf)
 
-
-        for key, value in biblio_result.items():
-            if key in ['task_id', 'library_id']:
-                continue
-            if key not in biblio_record:
-                biblio_result_false_positive_stat[key] = 1
 
         biblio_record_stat = BiblioStat.model_validate(biblio_record_stat)
         biblio_result_true_positive_stat = BiblioStat.model_validate(biblio_result_true_positive_stat)
         biblio_result_false_positive_stat = BiblioStat.model_validate(biblio_result_false_positive_stat)
+        biblio_result_label_conf = BiblioLabelConf.model_validate(biblio_result_label_conf)
 
         self.biblio_record_stats.append(biblio_record_stat)
         self.biblio_result_true_positive_stats.append(biblio_result_true_positive_stat)
         self.biblio_result_false_positive_stats.append(biblio_result_false_positive_stat)
+        self.biblio_result_label_conf.append(biblio_result_label_conf)
 
     @abstractmethod
-    def compare_list(self, record_list: List[str], result_list: List[Tuple[str, float]], biblio_class: str) -> int:
+    def compare_list(self, record_list: List[str], result_list: List[Tuple[str, float]], biblio_class: str) -> Tuple[int, List[int], List[float]]:
         pass
 
     @staticmethod
@@ -129,136 +163,49 @@ class BaseBiblioEvaluator(ABC):
                 'result_true_positive': sum([getattr(record, key) for record in self.biblio_result_true_positive_stats]),
                 'result_false_positive': sum([getattr(record, key) for record in self.biblio_result_false_positive_stats]),
             }
+            stats[key]['result_label'] = []
+            stats[key]['result_conf'] = []
+            for record in self.biblio_result_label_conf:
+                labels, conf = getattr(record, key)
+                stats[key]['result_label'] += labels
+                stats[key]['result_conf'] += conf
         return stats
 
 
 class CERBiblioEvaluator(BaseBiblioEvaluator):
-    def __init__(self, max_cer=0.1, top_k=1):
+    def __init__(self, max_cer=0.1):
         super().__init__()
         self.max_cer = max_cer
-        self.top_k = top_k
 
-    def compare_list(self, record_list: List[str], result_list: List[Tuple[str, float]], biblio_class: str) -> int:
+    def compare_list(self, record_list: List[str], result_list: List[Tuple[str, float]], biblio_class: str) -> Tuple[int, List[int], List[float]]:
         hits = 0
+        labels = []
+        conf = []
         ignore_record_i = []
         result_list = sorted(result_list, key=lambda x: x[1], reverse=True)
-        list_top_k = self.top_k * len(record_list)
         for k, (result_item, result_conf) in enumerate(result_list):
-            if k >= list_top_k:
-                break
+            result_found = False
             for record_i, record_item in enumerate(record_list):
                 if record_i in ignore_record_i:
                     continue
                 cer = self.get_cer(record_item, result_item)
                 if cer <= self.max_cer:
                     hits += 1
+                    labels.append(1)
+                    conf.append(result_conf)
                     ignore_record_i.append(record_i)
+                    result_found = True
                     break
-        return hits
+            if not result_found:
+                labels.append(0)
+                conf.append(result_conf)
+        for record_i, record_item in enumerate(record_list):
+            if record_i in ignore_record_i:
+                continue
+            labels.append(1)
+            conf.append(0.0)
 
-
-
-def normalize_biblio_result(biblio_result: BiblioResult):
-    normalized_biblio_result = BiblioResult(task_id=biblio_result.task_id,
-                                            library_id=biblio_result.library_id)
-
-    if biblio_result.title is not None:
-        normalized_titles = []
-        for title in biblio_result.title:
-            normalized_titles.append((normalize_title(title[0]), title[1]))
-        normalized_biblio_result.title = normalized_titles
-
-    if biblio_result.subTitle is not None:
-        normalized_sub_titles = []
-        for sub_title in biblio_result.subTitle:
-            normalized_sub_titles.append((normalize_sub_title(sub_title[0]), sub_title[1]))
-        normalized_biblio_result.subTitle = normalized_sub_titles
-
-    if biblio_result.partName is not None:
-        normalized_part_names = []
-        for part_name in biblio_result.partName:
-            normalized_part_names.append((normalize_part_name(part_name[0]), part_name[1]))
-        normalized_biblio_result.partName = normalized_part_names
-
-    if biblio_result.partNumber is not None:
-        normalized_part_numbers = []
-        for part_number in biblio_result.partNumber:
-            normalized_part_numbers.append((normalize_part_number(part_number[0]), part_number[1]))
-        normalized_biblio_result.partNumber = normalized_part_numbers
-
-    if biblio_result.seriesName is not None:
-        normalized_series_names = []
-        for series_name in biblio_result.seriesName:
-            normalized_series_names.append((normalize_series_name(series_name[0]), series_name[1]))
-        normalized_biblio_result.seriesName = normalized_series_names
-
-    if biblio_result.seriesNumber is not None:
-        normalized_series_numbers = []
-        for series_number in biblio_result.seriesNumber:
-            normalized_series_numbers.append((normalize_series_number(series_number[0]), series_number[1]))
-        normalized_biblio_result.seriesNumber = normalized_series_numbers
-
-    if biblio_result.edition is not None:
-        normalized_editions = []
-        for edition in biblio_result.edition:
-            normalized_editions.append((normalize_edition(edition[0]), edition[1]))
-        normalized_biblio_result.edition = normalized_editions
-
-    if biblio_result.placeTerm is not None:
-        normalized_place_terms = []
-        for place_term in biblio_result.placeTerm:
-            normalized_place_terms.append((normalize_place_term(place_term[0]), place_term[1]))
-        normalized_biblio_result.placeTerm = normalized_place_terms
-
-    if biblio_result.dateIssued is not None:
-        normalized_date_issued = []
-        for date_issued in biblio_result.dateIssued:
-            normalized_date_issued.append((normalize_date_issued(date_issued[0]), date_issued[1]))
-        normalized_biblio_result.dateIssued = normalized_date_issued
-
-    if biblio_result.manufacturePublisher is not None:
-        normalized_manufacture_publishers = []
-        for manufacture_publisher in biblio_result.manufacturePublisher:
-            normalized_manufacture_publishers.append((normalize_manufacture_publisher(manufacture_publisher[0]), manufacture_publisher[1]))
-        normalized_biblio_result.manufacturePublisher = normalized_manufacture_publishers
-
-    if biblio_result.manufacturePlaceTerm is not None:
-        normalized_manufacture_place_terms = []
-        for manufacture_place_term in biblio_result.manufacturePlaceTerm:
-            normalized_manufacture_place_terms.append((normalize_manufacture_place_term(manufacture_place_term[0]), manufacture_place_term[1]))
-        normalized_biblio_result.manufacturePlaceTerm = normalized_manufacture_place_terms
-
-    if biblio_result.publisher is not None:
-        normalized_publishers = []
-        for publisher in biblio_result.publisher:
-            normalized_publishers.append((normalize_publisher(publisher[0]), publisher[1]))
-        normalized_biblio_result.publisher = normalized_publishers
-
-    if biblio_result.author is not None:
-        normalized_authors = []
-        for author in biblio_result.author:
-            normalized_authors.append((normalize_author(author[0]), author[1]))
-        normalized_biblio_result.author = normalized_authors
-
-    if biblio_result.illustrator is not None:
-        normalized_illustrators = []
-        for illustrator in biblio_result.illustrator:
-            normalized_illustrators.append((normalize_illustrator(illustrator[0]), illustrator[1]))
-        normalized_biblio_result.illustrator = normalized_illustrators
-
-    if biblio_result.translator is not None:
-        normalized_translators = []
-        for translator in biblio_result.translator:
-            normalized_translators.append((normalize_translator(translator[0]), translator[1]))
-        normalized_biblio_result.translator = normalized_translators
-
-    if biblio_result.editor is not None:
-        normalized_editors = []
-        for editor in biblio_result.editor:
-            normalized_editors.append((normalize_editor(editor[0]), editor[1]))
-        normalized_biblio_result.editor = normalized_editors
-
-    return normalized_biblio_result
+        return hits, labels, conf
 
 
 def convert_alto_match_to_biblio_results(alto_match: ALTOMatch):
