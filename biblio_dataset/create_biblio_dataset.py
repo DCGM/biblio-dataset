@@ -59,6 +59,63 @@ label_studio_classes_to_biblio_record_classes = {
     'editor': 'editor'
 }
 
+biblio_record_classes_to_human_friendly = {
+    "title": "Title",
+    "subTitle": "Subtitle",
+    "partName": "Part Name",
+    "partNumber": "Part Number",
+    "seriesName": "Series Name",
+    "seriesNumber": "Series Number",
+    "edition": "Edition",
+    "publisher": "Publisher",
+    "placeTerm": "Publication Place",
+    "dateIssued": "Publication Date",
+    "manufacturePublisher": "Printer",
+    "manufacturePlaceTerm": "Printing Place",
+    "author": "Author",
+    "illustrator": "Illustrator",
+    "translator": "Translator",
+    "editor": "Editor"
+}
+
+biblio_record_classes_to_colors = {
+    "title": "#ff0000",
+    "subTitle": "#0000ff",
+    "partName": "#008f00",
+    "partNumber": "#db7100",
+    "seriesName": "#000000",
+    "seriesNumber": "#d104c3",
+    "edition": "#0071ad",
+    "publisher": "#9eb000",
+    "placeTerm": "#4fa1ff",
+    "dateIssued": "#55e68a",
+    "manufacturePublisher": "#696969",
+    "manufacturePlaceTerm": "#3fd1c7",
+    "author": "#e6d200",
+    "illustrator": "#fc7672",
+    "translator": "#ff7700",
+    "editor": "#a28fff"
+}
+
+biblio_record_classes_to_index = {
+    "title": 0,
+    "subTitle": 1,
+    "partName": 2,
+    "partNumber": 3,
+    "seriesName": 4,
+    "seriesNumber": 5,
+    "edition": 6,
+    "publisher": 7,
+    "placeTerm": 8,
+    "dateIssued": 9,
+    "manufacturePublisher": 10,
+    "manufacturePlaceTerm": 11,
+    "author": 12,
+    "illustrator": 13,
+    "translator": 14,
+    "editor": 15
+}
+
 
 logger = logging.getLogger(__name__)
 

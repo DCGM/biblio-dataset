@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Optional, Tuple, List
 
+import numpy as np
 from pydantic import BaseModel
 from abc import ABC, abstractmethod
 
@@ -49,10 +50,10 @@ class BiblioStat(BaseModel):
     seriesNumber: int = 0
 
     edition: int = 0
+    publisher: int = 0
     placeTerm: int = 0
     dateIssued: int = 0
 
-    publisher: int = 0
     manufacturePublisher: int = 0
     manufacturePlaceTerm: int = 0
 
@@ -111,6 +112,7 @@ class BaseBiblioEvaluator(ABC):
         for key, value in biblio_record.items():
             if key in ['task_id', 'library_id']:
                 continue
+            # FP
             if value is None and key in biblio_result and biblio_result[key] is not None:
                 biblio_result_false_positive_stat[key] = len(biblio_result[key])
                 labels = [0] * len(biblio_result[key])
@@ -129,8 +131,9 @@ class BaseBiblioEvaluator(ABC):
                 if biblio_result_false_positive_stat[key] < 0:
                     logger.warning(f"False positive count is negative, this should not happen, fix compare_list to return correct count")
                 biblio_result_label_conf[key] = (labels, conf)
+            # FN
             else:
-                labels = [1] * len(value)
+                labels = [-1] * len(value)
                 conf = [0.0] * len(value)
                 biblio_result_label_conf[key] = (labels, conf)
 
@@ -184,25 +187,28 @@ class CERBiblioEvaluator(BaseBiblioEvaluator):
         ignore_record_i = []
         result_list = sorted(result_list, key=lambda x: x[1], reverse=True)
         for k, (result_item, result_conf) in enumerate(result_list):
-            result_found = False
+            record_found = False
             for record_i, record_item in enumerate(record_list):
                 if record_i in ignore_record_i:
                     continue
                 cer = self.get_cer(record_item, result_item)
+                # TP
                 if cer <= self.max_cer:
                     hits += 1
                     labels.append(1)
                     conf.append(result_conf)
                     ignore_record_i.append(record_i)
-                    result_found = True
+                    record_found = True
                     break
-            if not result_found:
+            # FP
+            if not record_found:
                 labels.append(0)
                 conf.append(result_conf)
+        # FN
         for record_i, record_item in enumerate(record_list):
             if record_i in ignore_record_i:
                 continue
-            labels.append(1)
+            labels.append(-1)
             conf.append(0.0)
 
         return hits, labels, conf
@@ -240,3 +246,49 @@ def convert_alto_match_to_biblio_results(alto_match: ALTOMatch):
         biblio_results.append(biblio_result)
     logger.info(f"Converted {len(biblio_results)} matched pages to BiblioResults")
     return biblio_results
+
+
+def compute_ap(true, score):
+    """
+    Computes Average Precision (AP) using all recall points, explicitly handles False Negatives (FN).
+
+    Args:
+        true (np.array): Binary array (1 for TP, 0 for FP, -1 for FN).
+        score (np.array): Confidence scores (0 for FN, >0 for detected samples).
+
+    Returns:
+        ap (float): Average Precision.
+    """
+
+    # Step 1: Separate False Negatives (FN) from detections
+    fn_mask = (true == -1)  # FN samples have true = -1
+    num_fn = np.sum(fn_mask)  # Count of FN samples
+
+    # Step 2: Filter out FN samples for sorting and precision-recall computation
+    valid_mask = ~fn_mask  # Keep only detected samples (TP/FP)
+    true_detected = true[valid_mask]
+    score_detected = score[valid_mask]
+
+    # Step 3: Sort detected samples by confidence score (descending)
+    sorted_indices = np.argsort(-score_detected)  # Sort high → low
+    true_sorted = true_detected[sorted_indices]
+
+    # Step 4: Compute cumulative TP and FP
+    tp_cumsum = np.cumsum(true_sorted)  # Cumulative TP
+    fp_cumsum = np.cumsum(1 - true_sorted)  # Cumulative FP
+
+    # Step 5: Compute Precision and Recall
+    total_gt = np.sum(true == 1) + num_fn  # Total GT = TP + FN
+    recall = tp_cumsum / total_gt  # Adjusted Recall
+    precision = tp_cumsum / (tp_cumsum + fp_cumsum)  # Precision as TP / (TP + FP)
+    pr_sum = (precision + recall)
+    pr_sum[pr_sum == 0] = 0.0000001
+    f1 = 2 * (precision * recall) / pr_sum
+
+    # Step 6: Apply Monotonic Interpolation (VOC 2012-style smoothing)
+    precision_interp = np.maximum.accumulate(precision[::-1])[::-1]
+
+    # Step 7: Compute AP as area under PR curve using trapezoidal integration
+    ap = np.sum((recall[1:] - recall[:-1]) * precision_interp[1:]) if len(recall) > 1 else 0.0
+
+    return ap, precision_interp, recall, f1, score_detected[sorted_indices]

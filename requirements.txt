@@ -1,6 +1,7 @@
 pydantic~=2.10.6
 Levenshtein~=0.26.1
 PyYAML~=6.0.2
-regex
-numpy
-
+regex~=2024.11.6
+numpy~=2.2.3
+scikit-learn~=1.6.1
+matplotlib~=3.10.0
