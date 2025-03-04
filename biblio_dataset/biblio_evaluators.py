@@ -257,7 +257,7 @@ class CERBiblioSubstringEvaluator(BaseBiblioEvaluator):
                     cer = self.get_substr_cer(record_item, result_item)
                     standard_cer = self.get_cer(record_item, result_item)
                     if cer <= self.max_cer and standard_cer > self.max_cer:
-                        logger.info(f"Passing substring CER: {cer}, while not passing the standard CER: {standard_cer}, record: {record_item}, result: {result_item}")
+                        logger.info(f"sttribute: {biblio_class}, CER: {cer}, standard CER: {standard_cer}, record: {record_item}, result: {result_item}")
                 # TP
                 if cer <= self.max_cer:
                     hits += 1
