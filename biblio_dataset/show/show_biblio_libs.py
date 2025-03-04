@@ -71,7 +71,7 @@ def main():
 
 
     values, bins, bars = plt.hist(range(len(classes)), bins=range(len(classes) + 1), weights=weights,
-                                  color='skyblue', edgecolor='black', linewidth=1, zorder=5)
+                                  color='skyblue', edgecolor='black', linewidth=1, zorder=5, rwidth=0.8)
 
     plt.xticks(np.asarray(list(range(len(classes)))) + 0.5, classes, rotation=45)
     yticks = plt.yticks()

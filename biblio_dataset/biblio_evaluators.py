@@ -156,6 +156,27 @@ class BaseBiblioEvaluator(ABC):
     def get_cer(record_string: str, result_string: str) -> float:
         return distance(record_string, result_string) / float(len(record_string))
 
+    @staticmethod
+    def get_substr_cer(record_string: str, result_string: str, sub_cost=1, ins_cost=1, del_cost=1) -> float:
+        target = list(record_string)
+        source = list(result_string)
+        if len(target) > len(source):
+            raise ValueError("Record string must be shorter than result string")
+
+        target = np.array(target)
+        dist = np.ones((1 + len(target) + 1)) * float('inf')
+        dist[0] = 0
+        for s in source:
+            dist[1:-1] = np.minimum(dist[1:-1] + del_cost, dist[:-2] + (target != s) * sub_cost)
+
+            for ii in range(len(dist) - 2):
+                if dist[ii + 1] > dist[ii] + ins_cost:
+                    dist[ii + 1] = dist[ii] + ins_cost
+
+            dist[-1] = np.minimum(dist[-1], dist[-2])
+
+        return dist[-1]
+
     def get_stats(self):
         stats = {}
         for key in list(BiblioStat.model_fields.keys()):
@@ -212,6 +233,52 @@ class CERBiblioEvaluator(BaseBiblioEvaluator):
             conf.append(0.0)
 
         return hits, labels, conf
+
+
+class CERBiblioSubstringEvaluator(BaseBiblioEvaluator):
+    def __init__(self, max_cer=0.1):
+        super().__init__()
+        self.max_cer = max_cer
+
+    def compare_list(self, record_list: List[str], result_list: List[Tuple[str, float]], biblio_class: str) -> Tuple[int, List[int], List[float]]:
+        hits = 0
+        labels = []
+        conf = []
+        ignore_record_i = []
+        result_list = sorted(result_list, key=lambda x: x[1], reverse=True)
+        for k, (result_item, result_conf) in enumerate(result_list):
+            record_found = False
+            for record_i, record_item in enumerate(record_list):
+                if record_i in ignore_record_i:
+                    continue
+                if (len(record_item) >= len(result_item)) or (len(result_item) > len(record_item) * 2):
+                    cer = self.get_cer(record_item, result_item)
+                else:
+                    cer = self.get_substr_cer(record_item, result_item)
+                    standard_cer = self.get_cer(record_item, result_item)
+                    if cer <= self.max_cer and standard_cer > self.max_cer:
+                        logger.info(f"Passing substring CER: {cer}, while not passing the standard CER: {standard_cer}, record: {record_item}, result: {result_item}")
+                # TP
+                if cer <= self.max_cer:
+                    hits += 1
+                    labels.append(1)
+                    conf.append(result_conf)
+                    ignore_record_i.append(record_i)
+                    record_found = True
+                    break
+            # FP
+            if not record_found:
+                labels.append(0)
+                conf.append(result_conf)
+        # FN
+        for record_i, record_item in enumerate(record_list):
+            if record_i in ignore_record_i:
+                continue
+            labels.append(-1)
+            conf.append(0.0)
+
+        return hits, labels, conf
+
 
 
 def convert_alto_match_to_biblio_results(alto_match: ALTOMatch):

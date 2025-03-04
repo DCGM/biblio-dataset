@@ -10,10 +10,11 @@ from matplotlib.lines import Line2D
 from scipy.interpolate import interp1d
 
 from biblio_dataset.biblio_normalizer import BiblioNormalizer
-from biblio_dataset.biblio_evaluators import CERBiblioEvaluator, BaseBiblioEvaluator, BiblioResult, compute_ap
+from biblio_dataset.biblio_evaluators import CERBiblioEvaluator, BaseBiblioEvaluator, BiblioResult, compute_ap, \
+    CERBiblioSubstringEvaluator
 from biblio_dataset.create_biblio_dataset import BiblioRecord, biblio_record_classes_to_human_friendly, \
     biblio_record_classes_to_colors
-from sklearn.metrics import average_precision_score, precision_score, recall_score, f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def parse_arguments():
 
     parser.add_argument('--confidence-threshold', type=float, default=0.25, help="For recall and precision")
 
-    parser.add_argument('--evaluator', type=str, default='CER-01', choices=['CER-01'])
+    parser.add_argument('--evaluator', type=str, default='CER-01', choices=['CER-01', 'CER-01-SUBSTRING'])
 
     parser.add_argument('--show-prc-plot', action='store_true')
     parser.add_argument('--prc-plot-title', type=str, default='Precision-Recall Curve')
@@ -111,6 +112,8 @@ def eval_biblio_records(biblio_records, biblio_results, evaluator_name) -> BaseB
     logger.info(f"Evaluator: {evaluator_name}")
     if evaluator_name == 'CER-01':
         evaluator = CERBiblioEvaluator(max_cer=0.1)
+    elif evaluator_name == 'CER-01-SUBSTRING':
+        evaluator = CERBiblioSubstringEvaluator(max_cer=0.1)
     else:
         raise NotImplementedError(f"Evaluator {evaluator_name} is not implemented")
 

@@ -39,7 +39,7 @@ def main():
     dates = np.asarray(dates)
     logger.info("Max date: %d", np.max(dates))
     logger.info("Min date: %d", np.min(dates))
-    bins = [1485, 1800] + list(range(1820, 2000, 20)) + [2014]
+    bins = [1485, 1800] + list(range(1820, 2020, 20)) + [2014]
     indexes = np.digitize(dates, bins=bins)
 
     start_end_count = {}
