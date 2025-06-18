@@ -9,7 +9,9 @@ This repository contains official evaluation scripts for the **BiblioPage** data
 - Annotations include both text and precise bounding boxes
 - Evaluation results available for YOLO, DETR, and VLLMs (GPT-4o, LLaMA 3)
 
+You can download the dataset on [Zenodo](https://zenodo.org/records/15683417)
 For more details, see the [BiblioPage paper](https://arxiv.org/abs/2503.19658v1).
+
 
 ## ✅ Evaluation Script
 
