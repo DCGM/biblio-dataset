@@ -234,12 +234,14 @@ def log_stats(stats, confidence_threshold=0.25, show_prc_plot=False, prc_plot_ti
 
     logger.info(separator)
     logger.info(f"{'AVG':>25}  {"N/A":<10}{"N/A":<10}{"N/A":<10}{"N/A":<10}{np.mean(avg_recall):<10.2f}{np.mean(avg_precision):<10.2f}{np.mean(avg_f1):<10.2f}{np.mean(avg_true_aps):<10.2f}")
-    logger.info(f"{'Accuracy':>25}  {acc:<10.2f}")
+    #logger.info(f"{'Accuracy':>25}  {acc:<10.2f}")
 
     avg_confidences_c, avg_f1_c = compute_average_curve(confidences_all, f1_all)
     best_confidence = avg_confidences_c[np.argmax(avg_f1_c)]
+    logger.info("")
     logger.info(f"Best confidence threshold  {best_confidence:<10.2f}")
 
+    logger.info("")
     logger.info('Recall:')
     logger.info(f'{int(np.mean(avg_recall) * 100)} & ' + latex_string(avg_recall))
     logger.info('Precision:')
@@ -248,8 +250,8 @@ def log_stats(stats, confidence_threshold=0.25, show_prc_plot=False, prc_plot_ti
     logger.info(f'{int(np.mean(avg_f1) * 100)} & ' + latex_string(avg_f1))
     logger.info('AP:')
     logger.info(f'{int(np.mean(avg_true_aps) * 100)} & ' + latex_string(avg_true_aps))
-    logger.info('Accuracy:')
-    logger.info(f'{int(acc * 100)}')
+    #logger.info('Accuracy:')
+    #logger.info(f'{int(acc * 100)}')
 
     if show_prc_plot:
         plot_prc_f1(precision_all, recall_all, stats.keys(), title=prc_plot_title)

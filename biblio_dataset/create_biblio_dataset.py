@@ -7,7 +7,7 @@ import sys
 from detector_wrapper.parsers.detector_parser import DetectorParser
 from detector_wrapper.parsers.pero_ocr import ALTOMatch
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pydantic import BaseModel
 
 class BiblioRecord(BaseModel):
@@ -33,6 +33,35 @@ class BiblioRecord(BaseModel):
     illustrator: Optional[List[str]] = None
     translator: Optional[List[str]] = None
     editor: Optional[List[str]] = None
+
+
+# (x, y, width, height)
+Geometry = Tuple[int, int, int, int]
+
+# Text + geometry pair
+TextWithGeometry = Tuple[str, Geometry]
+
+
+class BiblioRecordWithGeometry(BiblioRecord):
+    title: Optional[TextWithGeometry] = None
+    subTitle: Optional[TextWithGeometry] = None
+    partName: Optional[TextWithGeometry] = None
+    partNumber: Optional[TextWithGeometry] = None
+    seriesName: Optional[TextWithGeometry] = None
+    seriesNumber: Optional[TextWithGeometry] = None
+
+    edition: Optional[TextWithGeometry] = None
+    placeTerm: Optional[TextWithGeometry] = None
+    dateIssued: Optional[TextWithGeometry] = None
+
+    publisher: Optional[List[TextWithGeometry]] = None
+    manufacturePublisher: Optional[TextWithGeometry] = None
+    manufacturePlaceTerm: Optional[TextWithGeometry] = None
+
+    author: Optional[List[TextWithGeometry]] = None
+    illustrator: Optional[List[TextWithGeometry]] = None
+    translator: Optional[List[TextWithGeometry]] = None
+    editor: Optional[List[TextWithGeometry]] = None
 
 
 label_studio_classes_to_biblio_record_classes = {

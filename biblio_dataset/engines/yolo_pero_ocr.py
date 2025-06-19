@@ -21,7 +21,6 @@ def parse_arguments():
 
     parser.add_argument('--min-alto-word-area-in-detection-to-match', type=float, default=0.65)
 
-    parser.add_argument('--normalize', action='store_true')
     parser.add_argument('--output-dir', type=str)
 
     parser.add_argument("--logging-level", default="INFO", choices=["ERROR", "WARNING", "INFO", "DEBUG"])
