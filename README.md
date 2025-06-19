@@ -147,6 +147,26 @@ Best confidence threshold: 0.30
 > 💡 *As shown above, the script reports a recommended confidence threshold based on maximum F1 score (`Best confidence threshold: 0.30`). You can re-run the script with this value using `--confidence-threshold` to obtain final results.*
 
 
-## 📜 License
+Here is the updated **License and Citation** section for your README:
 
-MIT License. For academic use, please cite our paper.
+---
+
+## 📜 License & Citation
+
+This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** license.
+
+Please cite our paper:
+
+```bibtex
+@misc{kohút2025bibliopagedatasetscannedtitle,
+  title        = {BiblioPage: A Dataset of Scanned Title Pages for Bibliographic Metadata Extraction},
+  author       = {Jan Kohút and Martin Dočekal and Michal Hradiš and Marek Vaško},
+  year         = {2025},
+  eprint       = {2503.19658},
+  archivePrefix= {arXiv},
+  primaryClass = {cs.CV},
+  url          = {https://arxiv.org/abs/2503.19658}
+}
+```
+
+
