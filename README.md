@@ -146,10 +146,6 @@ Best confidence threshold: 0.30
 
 > 💡 *As shown above, the script reports a recommended confidence threshold based on maximum F1 score (`Best confidence threshold: 0.30`). You can re-run the script with this value using `--confidence-threshold` to obtain final results.*
 
----
-
-Let me know if you'd like this exported as a Markdown or integrated into a documentation generator.
-
 
 ## 📜 License
 
