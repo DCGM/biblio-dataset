@@ -1,0 +1,270 @@
+convertor:  # Convertor to batch file.
+  cls: ToOllamaBatchFile  # name of class that is subclass of Convertor
+  config: # configuration for defined class
+    loader: # Loader for the data.
+      cls: HFImageLoader  # name of class that is subclass of Loader
+      config: # configuration for defined class
+        path_to: ~/openai_api_caller/data/biblio_dataset/hf # Path to the data.
+        config: # Configuration name.
+        split: "test" # Split of the dataset.
+    id_format: "{{file_name}}"  # Format string for custom id. You can use fields {{index}} and fields provided by the sample assembler.
+    model: llama3.2-vision:90b # OpenAI model name.
+    options: # additional model parameters listed in the documentation for the Modelfile such as temperature
+      temperature: 1.0
+      num_ctx: 128000
+      num_predict: 1024
+    sample_assembler: # Sample assembler for API request.
+      cls: ImageDatasetAssembler  # name of class that is subclass of APISampleAssembler
+      config: # configuration for defined class
+        input_template:  # Template for input assembly.
+          cls: MessagesTemplate  # name of class that is subclass of Template
+          config: # configuration for defined class
+            messages:   # List of message builders.
+              - cls: OllamaMessageBuilder
+                config:
+                  role: system
+                  content: |
+                    You are a research assistant tasked with extracting bibliographic data from scans and OCR outputs of scanned title pages. The title pages can be in various languages, and the OCR outputs may contain errors. Your goal is to extract specific attributes from the scan exactly as they appear without correcting errors or using external knowledge.
+              - cls: OllamaMessageBuilder
+                config:
+                  role: user
+                  content: |
+                    I need to extract following attributes from given scan:
+                    
+                    # Information About Title
+                    title
+                    subTitle
+                    partNumber
+                    partName
+                    seriesNumber
+                    seriesName
+  
+                    # Information About Origin
+                    edition
+                    placeTerm
+                    dateIssued
+                    publisher (may contain multiple values)
+                    manufacturePublisher
+                    manufacturePlaceTerm
+  
+                    # Information About Persons
+                    author (may contain multiple values)
+                    illustrator (may contain multiple values)
+                    translator (may contain multiple values)
+                    editor (may contain multiple values)
+              - cls: OllamaMessageBuilder
+                config:
+                  role: assistant
+                  content: Sure, may I ask you to provide me with detailed information about these attributes and a few examples of each of them?
+              - cls: OllamaMessageBuilder
+                config:
+                  role: user
+                  content: |
+                    Sure, here it is:
+                    # Attributes to Extract
+
+                    The following attributes may or may not be present in the scan. For attributes that can have multiple values (e.g., `author`, `publisher`), list them in an array, preserving the order as they appear.
+
+                    ## Information About Title
+                    - **`title`**: The main title of the work
+                    (e.g., "LÁSKA A SMRT", ""Nauka o kování koní.", "O dobytčím moru.", "JAK TO PŘIŠLO, že dne 20. srpna roku 1849, o půl jedné s poledne, Rakousko nebylo rozbořeno.", "ILUSTROVANÉ DĚJINY SVĚTOVÉ", "EVANGELIUM PODLE SEPSÁNÍ SVATÉHO MARKA.", "Zprávy o schůzích vinařského spolku okolí Mělníka za rok 1874, 1875 a 1876", "NEERA: LYDIA", "BROUCI. (COLEOPTERA.)", "Jak je v Americe?", "Kuchařská kniha pro hospodyně venkovské.", "DIVOKÉ POVÍDKY"),
+                    if present.
+                    USUAL PLACE: Top or upper center of the page. May be split into multiple lines and use multiple font types and sizes.
+
+                    - **`subTitle`**: Secondary title or subtitle
+                    (e.g., "POVÍDKY.", "JEHO ŽIVOT A SMRT.", "MORAVSKÝ ROMÁN Z LET 1890—1900", "BÁSNĚ", "Román", "POHÁDKA", "ROMÁN ČERNÉHO MAGIKA",  "HISTORICKÝ OBRAZ Z TŘICETILETÉ VÁLKY.", "HRA O TŘECH DĚJSTVÍCH.", "ČRTY Z POLÁRNÍ CESTY", "POVÍDKY A HUMORESKY.", "San Francisko 26. června 1945"),
+                    if present.
+                    USUAL PLACE: Below the title. May be split into multiple lines and use multiple font types and sizes.
+
+                    - **`partName`**: The name of this volume/part
+                    (e.g., "POLITICKÝ OKRES MILEVSKÝ.", "OBECNÉ NAUKY", "PRO DĚTI OD 12-15 LET", "NÁRODOPIS", "SKLADBA", "RÝNSKÉ ZLATO.", "OPUŠTĚNÝ.", "Tabulky lesnické.", "Matka a syn", "Plochoměrství.", "Obchod řepní.", "Reakce a vlastnosti organických sloučenin"),
+                    if the work is a part of multi-volume set.
+                    USUAL PLACE: Alongside or below the partNumber, often as part of the title or subtitle.
+
+                    - **`partNumber`**: The number of volume/part
+                    (e.g., "II", "SEDMÝ", "ZVLÁŠTNÍ.", "III.", "Druhý", "XLII", "22", "první", "III", "TŘETÍ", "VI", "PÁTÉ"),
+                    if the work is a part of multi-volume set.
+                    IMPORTANT return only the text referring to the numerical order of the volume/part, omit any general terms referring to the volume/part (e.g. "část", "díl", "číslo", "svazek").
+                    USUAL PLACE: Below the title/subtitle or integrated with the title.
+
+                    - **`seriesName`**: The name of the series/collection
+                    (e.g., "ČASOVÉ SPISKY MINISTERSTVA ZEMĚDĚLSTVÍ.", "PUBLIKACE MINISTERSTVA ZEMĚDĚLSTVÍ", "Working Paper Series", "Catalogus insectorum faunae bohemicae,", "NEUBERTOVY PŘEHLEDY", "LIDOVÉ ROZPRAVY LÉKAŘSKÉ.", "KNIHOVNIČKA „KRAJE“.", "KNIHOVNA „VARU“", "„DĚDICTVÍ KOMENSKÉHO“", "KNIHOVNA ČESKÝCH ZAHRADNICKÝCH LISTŮ", "SVĚTOVÁ KNIHOVNA", "DRAMATICKÁ DÍLA MOLIEROVA."),
+                    if the work is a part of series/collection.
+                    USUAL PLACE: Below the title/subtitle or near the seriesName.
+
+                    - **`seriesNumber`**: The number in the series/collection
+                    (e.g., "3", "340", "4", "V", "XI", "CXIII", "XXXV", "10", "LXXII", "248", "TŘETÍ", "první"),
+                    if the work is a part of series/collection.
+                    IMPORTANT return only the text referring to the numerical order of the series/collection, omit any general terms referring to the series/collection (e.g. "část", "díl", "číslo", "svazek").
+                    USUAL PLACE: Below the title/subtitle or near the seriesName.
+
+                    ## Information About Origin
+                    - **`edition`**: The order of edition, if present
+                    (e.g., "DESÁTÉ", "Dvanácté", "PÁTÉ", "DRUHÉ", "TŘETÍ", "Čtvrté", "ŠESTÉ", "JEDENÁCTÉ", "TŘICÁTÉČTVRTÉ", "II", "5", "IV").
+                    IMPORTANT return only the text referring to the numerical order, omit any general terms referring to the edition (e.g. "vydání").
+                    IMPORTANT if there is no numerical order return all information about the edition except the general terms (e.g. "vydání").
+                    USUAL PLACE: Near the bottom, often above or below the publisher.
+
+                    - **`placeTerm`**: The address/place of publication, usually city, occasionally also street and house number
+                    (e.g."PRAZE", "PRAHA", "CHRUDIMI", "Karlíně", "BERLIN", "Prag", "Wien", "PRAZE II., JERUSALEMSKÁ 11.", "Pardubicích", "Lauban", "HLINSKO", Praha, Václavské n. 42),
+                    if present.
+                    IMPORTANT return only the name of the address/place, omit any adpositions (eg. "V", "v") that are not part of the name itself.
+                    IMPORTANT if there are multiple place terms prefer the most visually dominant, even if it is less specific (e.g. missing street or house number).
+                    USUAL PLACE: At the bottom of the page near the publisher. Often on the same line with dateIssued.
+
+                    - **`dateIssued`**: The publication date
+                    (e.g., "1933", "1904", "1875", "1926", "V dubnu 1920", "1860", "M. DC. LXXXVII.", "1876", "M. D. LXX.", "1897.", "M. DCC. XVIII.", "1930"),
+                    if present.
+                    IMPORTANT return only the text referring to the date, omit any general terms referring to the issued date (e.g. "v roce", "roku", "měsíci", "dne").
+                    IMPORTANT do not try to extract the publication date from the general statements included in title, subTitle, partName, or seriesName.
+                    USUAL PLACE: At the bottom of the page near the publisher. Often on the same line with placeTerm.
+
+                    - **`publisher`**: The official name(s) of the publisher(s), can be a person or a company
+                    (e.g. "GABRIEL PECHÁČEK", "ORIENTÁLNÍ ÚSTAV AKADEMIE VĚD ČESKÉ REPUBLIKY", "CERGE-EI",  "A. DURAND", "SPOLKU ČESKÝCH ŽURNALISTŮ", "ČESKOSLOVENSKÉ GRAFICKÉ UNIE A. S.", "J. OTTY", "„LOUTKÁŘE“, spol. s r. o.", "MĚSTSKÉ VEŘEJNÉ KNIHOVNY V NOVÉM BYDŽOVĚ", "Julius Helbig",  "NAKLADATELSTVÍ JOS. R. VILÍMEK", "BURSÍK & KOHOUT"),
+                    if present.
+                    IMPORTANT use an array if multiple (e.g. ["GABRIEL PECHÁČEK", "ORIENTÁLNÍ ÚSTAV AKADEMIE VĚD ČESKÉ REPUBLIKY", "CERGE-EI"]) otherwise return array with one element (e.g. ["GABRIEL PECHÁČEK"]).
+                    IMPORTANT return only the text referring to the publisher, omit any general terms referring to the publisher (e.g. "vydal", "nákladem", "vydavatel", "nakladatel").
+                    IMPORTANT if the general term is part of the official publisher name return it (e. g. NAKLADATELSTVÍ JOS. R. VILÍMEK", "NAKLADATELSKÉ DRUŽSTVO MÁJE", "NAKLADATELSKÁ A VYDAVATELSKÁ SPOL. s R. O.", "LIDOVÉHO DRUŽSTVA TISKAŘSKÉHO A VYDAVATELSKÉHO", "NAKLADATELSTVÍ FR. BOROVÝ", "LIDOVÉ NAKLADATELSTVÍ").
+                    IMPORTANT sometimes can be specified indirectly (e.g. "nákladem vlastním", "nákladem spisovatele", "nákladem autora"), in such cases always return the actual name, never return the text of the indirect specification (e.g. "nákladem", "nákladem vlastním", "nákladem spisovatele", "nákladem autora")"
+                    USUAL PLACE: At the bottom center of the page near the placeTerm and dateIssued.
+                    
+                    - **`manufacturePublisher`**: The official name of the printer/manufacturer, can be a person or a company
+                    (e.g., "Aug. Geringera", "J. S. Skrejšovského", "V. Šimek", "Handelianis", "V. P. Nešněry", "knihtiskárny Birguse a Riedla", "Jos. Středa." "ALOISA WIESNERA", "arcibiskupské knihtiskárny", "JOS. B. ZÁPOTOČNÉHO", "J. VILENBACHA.", "PRŮMYSLOVÉ TISKÁRNY"),
+                    if present.
+                    IMPORTANT return only the text referring to the manufacturer or printer, omit any general terms referring to the printer/manufacturer (eg. "tiskem", "vytiskla").
+                    IMPORTANT if the general term is a part of the official publisher name return it (e.g. "TISKÁRNY MINISTERSTVA NÁR. OBRANY", "ROLNICKÁ TISKÁRNA", "DRUŽSTVA KNIHTISKÁRNY", "ZEMĚDĚLSKÉ KNIHTISKÁRNY").
+                    USUAL PLACE: At the bottom center of the page near the publisher.
+                    
+                    - **`manufacturePlaceTerm`**: The address/place of printer or manufacture, usually city, occasionally also street and house number
+                    (e.g. "Hradci Král.", "PRAHA", "Praze", "ZÁBŘEZE", "Brně", "Jaroměři", "Essegg-Oberstadt", "PRAZE I", "Mladé Boleslavi", "LETOVICÍCH U BRNA", "Brandýse n. Labem", "Vídeň"),
+                    if present.
+                    IMPORTANT return only the text referring to the address/place, omit any adpositions (e.g. "V", "v") that are not part of the address/place itself.
+                    USUAL PLACE: At the bottom center of the page near the manufacturePublisher.
+                    
+
+                    ## Information About Persons
+                    - **`author`**: The name(s) of the author(s)
+                    (e.g. "Karel Kadlec", "LADISLAV NOVÁK", "KAREL KOLÍSEK", "F. BAYER", "JAN KAPRAS", "RUDOLF ŘÍČAN", "JOSEF K. ŠLEJHAR", "KAREL JAROMÍR ERBEN", "JAROSLAV MIKAN", "Nathanael Gottfried Böttner", "ANT. MOHL.", "Karel Lev Řehák"),
+                    if present.
+                    IMPORTANT use an array if multiple (e.g. ["Karel Kadlec", "LADISLAV NOVÁK", "KAREL KOLÍSEK"]), otherwise return array with one element (e.g. ["Karel Kadlec"]).
+                    IMPORTANT return only the name of the author, omit any role specification (e.g. "autor", "napsal") and omit academic titles (e.g. "prof.", "dr.", "ing.", "arch.", "phd.").
+                    USUAL PLACE: Below the title/subtitle block or at the top, often centered stand alon block.
+
+                    - **`illustrator`**: The name(s) of the illustrator(s)
+                    (e.g. "J. R. Čížek", "RICHARD LAUDA", "ST. HUDEČKA", "KAREL RAŠEK", "Adolf Kašpars", "MIKULÁŠ ALEŠ", "G. ROUXE" "ANT. HAUSLER", "J. G. HOLINSKÝ", "FRANT. KOŽÍŠEK", "JOS. WENIGA", "V. OLIVA").
+                    IMPORTANT use an array if multiple (e.g. ["J. R. Čížek", "RICHARD LAUDA", "ST. HUDEČKA"]), otherwise return array with one element (e.g. ["J. R. Čížek"]).
+                    IMPORTANT return only the name of the illustrator, omit any role specification (e.g. "ilustrátor", "ilustroval", "kreslil") and omit academic titles (e.g. "prof.", "dr.", "ing.", "arch.", "phd.").
+                    USUAL PLACE: Below the author, often prefixed with "Ilustroval".
+
+                    - **`translator`**: The name(s) of the translator(s)
+                    (e.g. "O. S. VETTI", "FERDINAND PELIKÁN", "Pavel Durdík", "ZDENĚK FRANTA", "V. KOENIG", "Josef Škrábek", "FR. SUCHÁNEK", "BEDŘICH PAČÁK", "INDIGNUS", "JOS. V. SLÁDEK", "VINC. JIRÁSEK", "D. Ambrosium Lobwasser").
+                    Use an array if multiple (e.g., ["O. S. VETTI", "FERDINAND PELIKÁN", "Pavel Durdík"]), otherwise return array with one element (e.g., ["O. S. VETTI"]).
+                    IMPORTANT return only the name of the translator, omit any role specification (e.g. "překladatel", "přeložil") and omit academic titles (e.g. "prof.", "dr.", "ing.", "arch.", "phd.").
+                    USUAL PLACE: Below the author or illustrator, prefixed with "Přeložil".
+
+                    - **`editor`**: The name(s) of the editor(s)
+                    (e.g. "FERD. H. ČÁSLAVSKÝ", "Josef Šimáček", "JIŘÍ V. KLÍMA", "Hanuš Bonn", "Jan Pivoňka", "A. Hoffmann", "JOSEF MÍKA", "J. V. Neudorfl", "Frank B. Zdrůbek", "JOSEF BASL", "ALOJZ KOLÍSEK", "J. V. NOVÁK").
+                    IMPORTANT use an array if multiple (e.g. ["FERD. H. ČÁSLAVSKÝ", "Josef Šimáček", "JIŘÍ V. KLÍMA"]), otherwise return array with one element (e.g. ["FERD. H. ČÁSLAVSKÝ"]).
+                    IMPORTANT return only the name of the editor, omit any role specification (e.g. "editor", "připravil", "sestavil", "uspořádal") and omit academic titles (e.g. "prof.", "dr.", "ing.", "arch.", "phd.").
+                    USUAL PLACE: Center of the page, often prefixed with words like "Upravil", "Učinil", "Sestavil".
+
+                    GENERAL RULES:
+                    IMPORTANT for all attributes always omit general texts that refer to the role of the attribute (e.g.  "část", "díl", "číslo", "svazek", "vydání", "autor", "napsal", ilustrátor", "ilustroval", "kreslil", "překladatel", "přeložil", "editor", "připravil", "sestavil", "uspořádal").
+                    IMPORTANT for addresses/place omit any adpositions (e.g. "V", "v") that are not part of the name itself.
+                    IMPORTANT for names of persons always omit academic titles (e.g. "prof.", "dr.", "ing.", "arch.", "phd."), if they are not a part of a company name (rare situations).
+                    IMPORTANT some attributes might be divided into multiple lines and use multiple font types and sizes. Always extract whole text of the attribute.
+                    
+                    ADDITIONAL INFO:
+                    You are dealing with monographs in Czech, German, French, Italian, and Latin language.
+                    You are dealing with monographs published from 1600 onward.
+                    All examples were given in Czech, but you can expect the same structure in other languages.
+
+              - cls: OllamaMessageBuilder
+                config:
+                  role: assistant
+                  content: |
+                    Thank you for the information. I see that you find it important to omit general terms, role specifications, academic titles, and adpositions. I also see that some attributes might be divided into multiple lines and use multiple font types and sizes. I will keep that in mind.
+                    
+                    Do you have OCR output for me?
+              - cls: OllamaMessageBuilder
+                config:
+                  role: user
+                  content: |
+                    Yes, here is the OCR output:
+                    {{ocr}}
+                    Be aware that the OCR output may contain errors, such as misspellings or incorrect formatting. Extract the text as it is without attempting to correct these errors.
+              - cls: OllamaMessageBuilder
+                config:
+                  role: assistant
+                  content: |
+                    Thank you I will use it as supplementary material. I will also need the scan of the title page. Could you provide it to me?
+              - cls: OllamaMessageBuilder
+                config:
+                  role: user
+                  content: |
+                    Extract the bibliographic data from the following scan and OCR output of the title page. Include only the attributes that appear in the scan exactly as they are written. Use the JSON format for the output, with attribute names as keys and their values as strings or lists of strings.
+                  images: ["{{image.filename}}"]
+        split: "test" # Split of the dataset.
+    format: # Format of the response.
+      type: object
+      properties:
+        title:
+          type: [ "string", "null" ]
+        subTitle:
+          type: [ "string", "null" ]
+        partNumber:
+          type: [ "string", "null" ]
+        partName:
+          type: [ "string", "null" ]
+        seriesNumber:
+          type: [ "string", "null" ]
+        seriesName:
+          type: [ "string", "null" ]
+        edition:
+          type: [ "string", "null" ]
+        placeTerm:
+          type: [ "string", "null" ]
+        dateIssued:
+          type: [ "string", "null" ]
+        publisher:
+          type: array
+          items:
+            type: string
+        manufacturePublisher:
+          type: [ "string", "null" ]
+        manufacturePlaceTerm:
+          type: [ "string", "null" ]
+        author:
+          type: array
+          items:
+            type: string
+        illustrator:
+          type: array
+          items:
+            type: string
+        translator:
+          type: array
+          items:
+            type: string
+        editor:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+      required:
+        - title
+        - subTitle
+        - partNumber
+        - partName
+        - seriesNumber
+        - seriesName
+        - edition
+        - placeTerm
+        - dateIssued
+        - publisher
+        - manufacturePublisher
+        - manufacturePlaceTerm
+        - author
+        - illustrator
+        - translator
+        - editor
